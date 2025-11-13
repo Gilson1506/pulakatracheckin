@@ -302,8 +302,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="font-sans bg-gray-200">
-      <div className="w-full mx-auto min-h-screen bg-white shadow-lg flex flex-col">
+    <div className="font-sans bg-gray-200 h-dvh overflow-hidden">
+      <div className="w-full mx-auto h-full bg-white shadow-lg flex flex-col overflow-hidden">
           {renderScreen()}
       </div>
       {feedbackModal && <FeedbackModal data={feedbackModal} onClose={closeFeedbackModal} />}
