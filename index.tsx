@@ -1,6 +1,6 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 
 const rootElement = document.getElementById('root');
@@ -14,3 +14,5 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+registerSW({ immediate: true });

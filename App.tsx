@@ -205,6 +205,74 @@ const App: React.FC = () => {
     }
   }, [selectedEvent, user]);
 
+  const handleCheckInByQr = useCallback(async (decodedText: string) => {
+    if (!selectedEvent || !user) return;
+
+    if (!selectedEvent.uuid) {
+      console.error('Evento sem UUID para check-in (QR)');
+      setFeedbackModal({ type: 'invalid' });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('perform_operator_checkin', {
+        p_operator_id: user.id,
+        p_event_id: selectedEvent.uuid,
+        p_qr_code: decodedText,
+        p_ticket_id: null
+      });
+
+      if (error) throw error;
+
+      if (!data || !data.success) {
+        if (data?.already_checked_in) {
+          // Tentar localizar participante localmente pelo qrCode
+          const participant = selectedEvent.participants.find(p => p.qrCode === decodedText);
+          setFeedbackModal({
+            type: 'warning',
+            participant: participant || undefined,
+            previousCheckIn: {
+              time: data?.checkin?.created_at ? new Date(data.checkin.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
+              operator: user.name
+            }
+          });
+          return;
+        }
+        setFeedbackModal({ type: 'invalid' });
+        return;
+      }
+
+      // Atualizar estado local se conseguirmos identificar participante pelo QR
+      const localParticipant = selectedEvent.participants.find(p => p.qrCode === decodedText);
+      if (localParticipant) {
+        const updatedParticipants = selectedEvent.participants.map(p => {
+          if (p.id === localParticipant.id) {
+            return {
+              ...p,
+              name: data.participant?.name || p.name,
+              email: data.participant?.email || p.email,
+              cpf: data.participant?.document || p.cpf,
+              checkedIn: true,
+              checkInTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+              checkedInBy: user?.name || 'Operador'
+            };
+          }
+          return p;
+        });
+        const updatedEvent = { ...selectedEvent, participants: updatedParticipants };
+        setSelectedEvent(updatedEvent);
+        setEvents(prev => prev.map(e => (e.id === selectedEvent.id ? updatedEvent : e)));
+        setFeedbackModal({ type: 'success', participant: updatedParticipants.find(p => p.id === localParticipant.id) });
+      } else {
+        // Sem participante local — apenas mostrar sucesso
+        setFeedbackModal({ type: 'success', participant: undefined });
+      }
+    } catch (error: any) {
+      console.error('Erro ao realizar check-in por QR (RPC):', error);
+      setFeedbackModal({ type: 'invalid' });
+    }
+  }, [selectedEvent, user]);
+
   const closeFeedbackModal = () => setFeedbackModal(null);
 
   const renderScreen = () => {
@@ -225,7 +293,7 @@ const App: React.FC = () => {
           )
         );
       case 'checkIn':
-        return selectedEvent && <CheckInScreen event={selectedEvent} onCheckIn={handleCheckIn} onNavigateToStats={() => setScreen('statistics')} onBack={() => setScreen('eventSelection')} />;
+        return selectedEvent && <CheckInScreen event={selectedEvent} onCheckIn={handleCheckIn} onCheckInByQr={handleCheckInByQr} onNavigateToStats={() => setScreen('statistics')} onBack={() => setScreen('eventSelection')} />;
       case 'statistics':
         return selectedEvent && user && <StatisticsScreen event={selectedEvent} operatorName={user.name} onBack={() => setScreen('checkIn')} />;
       default:

@@ -1,15 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Participant } from '../types';
-import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5QrcodeScanner, Html5QrcodeSupportedFormats, Html5QrcodeScanType } from 'html5-qrcode';
 import { getLogoUrl } from '../lib/branding';
 
 interface QRScannerProps {
-  participants: Participant[];
-  onScanSuccess: (participantId: number) => void;
+  onScan: (decodedText: string) => void;
   onScanError: () => void;
 }
 
-const QRScanner: React.FC<QRScannerProps> = ({ participants, onScanSuccess, onScanError }) => {
+const QRScanner: React.FC<QRScannerProps> = ({ onScan, onScanError }) => {
   const [status, setStatus] = useState<'idle' | 'scanning' | 'error' | 'unsupported'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
@@ -34,8 +33,11 @@ const QRScanner: React.FC<QRScannerProps> = ({ participants, onScanSuccess, onSc
           fps: 10,
           qrbox: { width: 240, height: 240 },
           rememberLastUsedCamera: true,
+          showTorchButtonIfSupported: true,
+          showZoomSliderIfSupported: true,
+          aspectRatio: 1.333,
           supportedScanTypes: [
-            // Live camera scanning
+            Html5QrcodeScanType.SCAN_TYPE_CAMERA,
           ],
           formatsToSupport: [
             Html5QrcodeSupportedFormats.QR_CODE,
@@ -47,25 +49,8 @@ const QRScanner: React.FC<QRScannerProps> = ({ participants, onScanSuccess, onSc
 
         scanner.render(
           (decodedText) => {
-            // Tentar mapear o texto do QR para um participante
-            // Convenções aceitas: texto igual ao qrCode salvo, ou número/id
-            const direct = participants.find(p => p.qrCode && (p.qrCode === decodedText));
-            if (direct) {
-              onScanSuccess(direct.id);
-              return;
-            }
-
-            const asNumber = Number(decodedText);
-            if (!Number.isNaN(asNumber)) {
-              const byId = participants.find(p => p.id === asNumber);
-              if (byId) {
-                onScanSuccess(byId.id);
-                return;
-              }
-            }
-
-            // Não encontrou participante local — sinalizar para tratar via backend
-            onScanError();
+            // Encaminhar QR dinâmico para a camada superior tratar (RPC/backend)
+            onScan(decodedText);
           },
           (err) => {
             // Erros intermitentes de detecção — manter log leve
@@ -79,18 +64,26 @@ const QRScanner: React.FC<QRScannerProps> = ({ participants, onScanSuccess, onSc
       }
     }
 
-    // Solicitar permissão explicitamente dispara o prompt do navegador
-    navigator.mediaDevices?.getUserMedia?.({ video: { facingMode: 'environment' } })
-      .then((stream) => {
-        // Parar tracks imediatamente; html5-qrcode gerencia as próprias
+    // Consultar permissão e acionar prompt de forma amigável
+    const requestCamera = async () => {
+      try {
+        const perm = (navigator as any).permissions?.query ? await (navigator as any).permissions.query({ name: 'camera' as any }) : null;
+        if (perm && perm.state === 'denied') {
+          setStatus('error');
+          setErrorMsg('Permissão de câmera negada nas configurações do navegador. Habilite a câmera para continuar.');
+          return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
         stream.getTracks().forEach(t => t.stop());
         if (!cancelled) startScanner();
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         setStatus('error');
         setErrorMsg('Permissão de câmera negada.');
-      });
+      }
+    };
+
+    requestCamera();
 
     return () => {
       cancelled = true;
@@ -98,7 +91,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ participants, onScanSuccess, onSc
         scannerRef.current?.clear?.();
       } catch {}
     };
-  }, [participants, onScanError, onScanSuccess]);
+  }, [onScan, onScanError]);
 
   return (
     <div className="flex-grow flex flex-col items-center justify-center bg-gray-900 text-white">
@@ -112,18 +105,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ participants, onScanSuccess, onSc
           {status === 'unsupported' && (errorMsg || 'Câmera não suportada neste dispositivo.')}
           {status === 'error' && (errorMsg || 'Erro ao acessar a câmera.')}
         </div>
-      </div>
-      <div className="pb-4">
-        <button
-          onClick={() => {
-            // Fallback: selecionar participante aleatório válido
-            if (participants.length > 0) onScanSuccess(participants[0].id);
-            else onScanError();
-          }}
-          className="mt-2 bg-white/10 backdrop-blur-sm border border-white/20 text-white py-2 px-4 rounded-md text-sm"
-        >
-          Usar fallback de teste
-        </button>
       </div>
     </div>
   );

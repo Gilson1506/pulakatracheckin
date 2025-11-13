@@ -8,13 +8,14 @@ import { getLogoUrl } from '../lib/branding';
 interface CheckInScreenProps {
   event: Event;
   onCheckIn: (participantId: number) => void;
+  onCheckInByQr: (decodedText: string) => void;
   onNavigateToStats: () => void;
   onBack: () => void;
 }
 
 type ActiveTab = 'qr' | 'search';
 
-const CheckInScreen: React.FC<CheckInScreenProps> = ({ event, onCheckIn, onNavigateToStats, onBack }) => {
+const CheckInScreen: React.FC<CheckInScreenProps> = ({ event, onCheckIn, onCheckInByQr, onNavigateToStats, onBack }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('qr');
 
   return (
@@ -26,7 +27,7 @@ const CheckInScreen: React.FC<CheckInScreenProps> = ({ event, onCheckIn, onNavig
       </header>
       
       <main key={activeTab} className="flex-grow flex flex-col animate-fade-in">
-        {activeTab === 'qr' && <QRScanner participants={event.participants} onScanSuccess={onCheckIn} onScanError={() => onCheckIn(-1)} />}
+        {activeTab === 'qr' && <QRScanner onScan={(text) => onCheckInByQr(text)} onScanError={() => { /* manter silencioso */ }} />}
         {activeTab === 'search' && <ManualSearch participants={event.participants} onCheckIn={onCheckIn} />}
       </main>
 
