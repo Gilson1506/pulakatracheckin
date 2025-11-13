@@ -49,26 +49,27 @@ const App: React.FC = () => {
 
       // Converter os dados da RPC para o formato esperado pelo app
       const eventsWithParticipants: Event[] = (data.events || []).map((event: any) => {
-        // Mostrar apenas usuários (ticket_users) vinculados a este evento
-        const participants: Participant[] = (event.tickets || [])
-          .filter((ticket: any) => !!ticket.ticket_user && !!ticket.ticket_user.id)
-          .map((ticket: any) => {
-            const tu = ticket.ticket_user || {};
-            return {
-              id: uuidToNumber(ticket.id),
-              name: tu.name || ticket.participant_name || 'Não informado',
-              email: tu.email || ticket.participant_email || '',
-              cpf: tu.document || ticket.participant_document || '',
-              ticketType: ticket.ticket_type || 'Geral',
-              price: ticket.price || 0,
-              checkedIn: ticket.checked_in || false,
-              checkInTime: ticket.checkin_info?.checkin_date
-                ? new Date(ticket.checkin_info.checkin_date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                : undefined,
-              checkedInBy: ticket.checkin_info?.operator_name || undefined,
-              qrCode: ticket.qr_code
-            };
-          });
+        const participants: Participant[] = (event.tickets || []).map((ticket: any) => {
+          const tu = ticket.ticket_user || {};
+          const name = (tu.name || ticket.participant_name || '').trim() || 'Não informado';
+          const email = (tu.email || ticket.participant_email || '').trim();
+          const cpf = (tu.document || ticket.participant_document || '').trim();
+          const checked = !!(ticket.checked_in || ticket.checkin_info?.checked_in || ticket.checkin_info?.checkin_date);
+          const checkTime = ticket.checkin_info?.checkin_date ? new Date(ticket.checkin_info.checkin_date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : undefined;
+          const qrRaw = ticket.qr_code || ticket.qr || ticket.code || '';
+          return {
+            id: uuidToNumber(String(ticket.id || ticket.ticket_id || name + email + cpf)),
+            name,
+            email,
+            cpf,
+            ticketType: ticket.ticket_type || 'Geral',
+            price: Number(ticket.price || 0),
+            checkedIn: checked,
+            checkInTime: checkTime,
+            checkedInBy: ticket.checkin_info?.operator_name || undefined,
+            qrCode: typeof qrRaw === 'string' ? qrRaw.trim() : ''
+          };
+        });
 
         return {
           id: uuidToNumber(event.id),
@@ -214,11 +215,26 @@ const App: React.FC = () => {
       return;
     }
 
+    const parseQr = (v: string) => {
+      const t = (v || '').trim();
+      try {
+        const url = new URL(t);
+        const qp = url.searchParams.get('q') || url.searchParams.get('code') || url.searchParams.get('qr') || '';
+        if (qp) return qp.trim();
+        const parts = url.pathname.split('/').filter(Boolean);
+        return (parts[parts.length - 1] || t).trim();
+      } catch {
+        return t;
+      }
+    };
+
+    const token = parseQr(decodedText);
+
     try {
       const { data, error } = await supabase.rpc('perform_operator_checkin', {
         p_operator_id: user.id,
         p_event_id: selectedEvent.uuid,
-        p_qr_code: decodedText,
+        p_qr_code: token,
         p_ticket_id: null
       });
 
@@ -226,8 +242,8 @@ const App: React.FC = () => {
 
       if (!data || !data.success) {
         if (data?.already_checked_in) {
-          // Tentar localizar participante localmente pelo qrCode
-          const participant = selectedEvent.participants.find(p => p.qrCode === decodedText);
+          // Tentar localizar participante localmente pelo qrCode normalizado
+          const participant = selectedEvent.participants.find(p => (p.qrCode || '').trim() === token);
           setFeedbackModal({
             type: 'warning',
             participant: participant || undefined,
@@ -243,7 +259,7 @@ const App: React.FC = () => {
       }
 
       // Atualizar estado local se conseguirmos identificar participante pelo QR
-      const localParticipant = selectedEvent.participants.find(p => p.qrCode === decodedText);
+      const localParticipant = selectedEvent.participants.find(p => (p.qrCode || '').trim() === token);
       if (localParticipant) {
         const updatedParticipants = selectedEvent.participants.map(p => {
           if (p.id === localParticipant.id) {

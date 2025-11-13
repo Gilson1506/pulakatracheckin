@@ -13,16 +13,20 @@ const ManualSearch: React.FC<ManualSearchProps> = ({ participants, onCheckIn }) 
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredParticipants = useMemo(() => {
-    if (!searchTerm) {
-      return participants;
-    }
-    const lowercasedTerm = searchTerm.toLowerCase();
-    return participants.filter(
-      p =>
-        p.name.toLowerCase().includes(lowercasedTerm) ||
-        p.cpf.includes(lowercasedTerm) ||
-        p.email.toLowerCase().includes(lowercasedTerm)
-    );
+    if (!searchTerm) return participants;
+
+    const term = searchTerm.trim();
+    const termLower = term.toLowerCase();
+    const termDigits = term.replace(/\D+/g, '');
+
+    return participants.filter(p => {
+      const nameMatch = (p.name || '').toLowerCase().includes(termLower);
+      const emailMatch = (p.email || '').toLowerCase().includes(termLower);
+      const cpfDigits = (p.cpf || '').replace(/\D+/g, '');
+      const cpfMatch = termDigits && cpfDigits.includes(termDigits);
+      const qrMatch = (p.qrCode || '').toLowerCase().includes(termLower);
+      return nameMatch || emailMatch || cpfMatch || qrMatch;
+    });
   }, [participants, searchTerm]);
 
   return (
