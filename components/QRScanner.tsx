@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Participant } from '../types';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { getLogoUrl } from '../lib/branding';
 
 interface QRScannerProps {
   onScan: (decodedText: string) => void;
@@ -42,13 +41,18 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onScanError }) => {
           }
         } catch {}
 
+        // Calcular tamanho do box quadrado (maior) dinamicamente
+        const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+        const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+        let qrBoxSize = Math.min(Math.floor(vw * 0.85), Math.floor(vh * 0.55));
+        qrBoxSize = Math.max(260, Math.min(qrBoxSize, 520));
+
         await html5qrcode.start(
           startArg,
           {
             fps: 10,
-            qrbox: { width: 240, height: 240 },
-            aspectRatio: 1.333,
-            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+            qrbox: qrBoxSize, // quadrado e grande
+            aspectRatio: undefined as any,
           },
           (decodedText) => {
             onScan(decodedText);
@@ -98,13 +102,10 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onScanError }) => {
   }, [onScan, onScanError]);
 
   return (
-    <div className="flex flex-col items-center justify-start bg-gray-900 text-white h-full">
-      <header className="w-full flex items-center justify-center py-3">
-        <img src={getLogoUrl()} alt="logo" className="h-8" />
-      </header>
-      <div className="w-full max-w-sm p-4 flex-grow flex flex-col items-center">
-        <div id={containerId} className="rounded-md overflow-hidden bg-black w-full aspect-[4/3]" />
-        <div className="mt-3 text-center text-sm opacity-80 min-h-[24px]">
+    <div className="flex flex-col items-center justify-center bg-gray-900 text-white h-full w-full">
+      <div className="w-full h-full p-3 flex flex-col items-center justify-center">
+        <div id={containerId} className="rounded-xl overflow-hidden bg-black w-full h-full max-w-[900px]" />
+        <div className="mt-3 text-center text-sm opacity-80 min-h-[20px]">
           {status === 'scanning' && 'Aponte para o QR code'}
           {status === 'unsupported' && (errorMsg || 'Câmera não suportada neste dispositivo.')}
           {status === 'error' && (errorMsg || 'Erro ao acessar a câmera.')}
