@@ -1,0 +1,7 @@
+{
+  "name": "Pulacatraca - Event Check-in",
+  "description": "An event check-in application for operators to scan QR codes and manually search for attendees, inspired by the Pulacatraca app design.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
